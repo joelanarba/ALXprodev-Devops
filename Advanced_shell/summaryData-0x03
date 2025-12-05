@@ -1,22 +1,40 @@
 #!/usr/bin/env bash
-# summaryData-0x03.sh
-# Summarizes Pokémon data into a CSV and calculates average height & weight
+# batchProcessing-0x02.sh
+# Fetch data for multiple Pokémon from the Pokémon API with retry logic
 
-INPUT_DIR="pokemon_data"
-OUTPUT_FILE="pokemon_report.csv"
+POKEMONS=("bulbasaur" "ivysaur" "venusaur" "charmander" "charmeleon")
+OUTPUT_DIR="pokemon_data"
+ERROR_FILE="errors.txt"
+MAX_RETRIES=3
+DELAY=1  # seconds between retries and requests
 
-# Header for CSV
-echo "Name,Height (m),Weight (kg)" > "$OUTPUT_FILE"
+# Create output directory if it doesn't exist
+mkdir -p "$OUTPUT_DIR"
 
-# Loop through all JSON files
-for FILE in "$INPUT_DIR"/*.json; do
-    NAME=$(jq -r '.name' "$FILE" | sed 's/.*/\u&/')      # capitalize name
-    HEIGHT=$(jq -r '.height' "$FILE")
-    WEIGHT=$(jq -r '.weight' "$FILE")
-    echo "$NAME,$HEIGHT,$WEIGHT" >> "$OUTPUT_FILE"
+for POKE in "${POKEMONS[@]}"; do
+    echo "Fetching data for $POKE..."
+    ATTEMPT=1
+    SUCCESS=0
+
+    while [ $ATTEMPT -le $MAX_RETRIES ]; do
+        HTTP_STATUS=$(curl -s -w "%{http_code}" -o "$OUTPUT_DIR/$POKE.json" "https://pokeapi.co/api/v2/pokemon/$POKE")
+
+        if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "Saved data to $OUTPUT_DIR/$POKE.json ✅"
+            SUCCESS=1
+            break
+        else
+            echo "Attempt $ATTEMPT failed for $POKE (HTTP $HTTP_STATUS)"
+            ((ATTEMPT++))
+            sleep "$DELAY"
+        fi
+    done
+
+    if [ $SUCCESS -eq 0 ]; then
+        echo "$(date) - Failed to fetch $POKE after $MAX_RETRIES attempts. HTTP status: $HTTP_STATUS" >> "$ERROR_FILE"
+        echo "Skipping $POKE..."
+    fi
+
+    # Delay between Pokémon to respect API rate limits
+    sleep "$DELAY"
 done
-
-echo "CSV Report generated at: $OUTPUT_FILE"
-
-# Calculate average height and weight
-awk -F, 'NR>1 {h+=$2; w+=$3; n++} END {printf "\nAverage Height: %.2f m\nAverage Weight: %.2f kg\n", h/n, w/n}' "$OUTPUT_FILE"
