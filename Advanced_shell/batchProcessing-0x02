@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# batchProcessing-0x02.sh
+# Fetch data for multiple Pokémon from the Pokémon API
+
+POKEMONS=("bulbasaur" "ivysaur" "venusaur" "charmander" "charmeleon")
+OUTPUT_DIR="pokemon_data"
+ERROR_FILE="errors.txt"
+DELAY=1  # seconds delay between requests to prevent rate-limiting
+
+# Create output directory if it doesn't exist
+mkdir -p "$OUTPUT_DIR"
+
+for POKE in "${POKEMONS[@]}"; do
+    echo "Fetching data for $POKE..."
+    RESPONSE=$(curl -s -w "%{http_code}" -o "$OUTPUT_DIR/$POKE.json" "https://pokeapi.co/api/v2/pokemon/$POKE")
+    
+    # Check HTTP status code
+    if [ "$RESPONSE" -ne 200 ]; then
+        echo "$(date) - Failed to fetch $POKE data. HTTP status: $RESPONSE" >> "$ERROR_FILE"
+    else
+        echo "Saved data to $OUTPUT_DIR/$POKE.json ✅"
+    fi
+
+    # Delay to prevent hitting API rate limits
+    sleep "$DELAY"
+done
