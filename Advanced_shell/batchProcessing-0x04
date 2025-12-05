@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# batchProcessing-0x04.sh
+# Fetch Pokémon data in parallel with retries and error handling
+
+POKEMONS=("bulbasaur" "ivysaur" "venusaur" "charmander" "charmeleon")
+OUTPUT_DIR="pokemon_data"
+ERROR_FILE="errors.txt"
+MAX_RETRIES=3
+DELAY=1
+
+mkdir -p "$OUTPUT_DIR"
+
+fetch_pokemon() {
+    local POKE=$1
+    local ATTEMPT=1
+    local SUCCESS=0
+
+    while [ $ATTEMPT -le $MAX_RETRIES ]; do
+        HTTP_STATUS=$(curl -s -w "%{http_code}" -o "$OUTPUT_DIR/$POKE.json" "https://pokeapi.co/api/v2/pokemon/$POKE")
+
+        if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "Saved data to $OUTPUT_DIR/$POKE.json ✅"
+            SUCCESS=1
+            break
+        else
+            echo "Attempt $ATTEMPT failed for $POKE (HTTP $HTTP_STATUS)"
+            ((ATTEMPT++))
+            sleep "$DELAY"
+        fi
+    done
+
+    if [ $SUCCESS -eq 0 ]; then
+        echo "$(date) - Failed to fetch $POKE after $MAX_RETRIES attempts. HTTP status: $HTTP_STATUS" >> "$ERROR_FILE"
+        echo "Skipping $POKE..."
+    fi
+}
+
+# Launch all fetches in parallel
+for POKE in "${POKEMONS[@]}"; do
+    fetch_pokemon "$POKE" &
+done
+
+# Wait for all background processes to complete
+wait
+
+echo "All Pokémon data fetches completed."
